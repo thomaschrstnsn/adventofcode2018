@@ -4,10 +4,13 @@
   --resolver lts-12.18
   --package hspec
   --package hspec-core
+  --package containers
 -}
 import Data.Char (digitToInt)
 import Specs (specFromExamples, specItem)
 import Test.Hspec (SpecWith, describe, hspec, it, shouldBe)
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 input :: IO [String]
 input = lines <$> readFile "day01input.txt"
@@ -22,32 +25,32 @@ readInputs = map readInt
         '-' -> negate $ read ss
         _ -> read x
     
-sumInputs :: [Int] -> Int
-sumInputs = sum
+findFirstRepeatFreq :: [Int] -> Int
+findFirstRepeatFreq xs = helper (cycle xs) 0 (Set.fromList [0])
+  where
+    helper :: [Int] -> Int -> Set Int -> Int
+    helper (x:xs) cur seen =
+      let next = x + cur
+      in
+        if Set.member next seen
+        then
+          next
+        else
+          helper xs next (Set.union (Set.fromList [next]) seen)
 
 solve :: [String] -> Int
-solve = sumInputs . readInputs
+solve = findFirstRepeatFreq . readInputs
 
-tests = do
-  describe "readInputs" $
-    specFromExamples
-      [ (["+1", "-2", "+3", "+1"], [1,-2,3,1])
-      , (["+1", "+1", "+1"], [1,1,1])
-      , (["+1", "+1", "-2"], [1,1,-2])
-      , (["-1", "-2", "-3"], [-1, -2, -3])
-      ]
-      (\(input, expected) -> 
-        specItem (show input ++ " should be: " ++ show expected) $
-          readInputs input `shouldBe` expected)
+tests =
   describe "solve" $
     specFromExamples 
-      [ (["+1", "-2", "+3", "+1"], 3)
-      , (["+1", "+1", "+1"], 3)
-      , (["+1", "+1", "-2"], 0)
-      , (["-1", "-2", "-3"], -6)
+      [ (["+1", "-1"], 0)
+      , (["+3", "+3", "+4", "-2", "-4"], 10)
+      , (["-6", "+3", "+8", "+5", "-6"], 5)
+      , (["+7", "+7", "-2", "-7", "-4"], 14)
       ]
       (\(input, expected) -> 
-        specItem (show input ++ " should be: " ++ show expected) $
+        specItem (show input ++ " first reaches: " ++ show expected ++ " twice") $
           solve input `shouldBe` expected)
 
 main :: IO ()

@@ -1,6 +1,7 @@
 resolver: lts-12.18
 packages:
 - .
+- containers
 
 extra-deps: []
 
