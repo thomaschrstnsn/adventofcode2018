@@ -6,19 +6,20 @@
   --package hspec-core
   --package containers
 -}
-import Data.Char (digitToInt)
-import Specs (specFromExamples, specItem)
-import Test.Hspec (SpecWith, describe, hspec, it, shouldBe)
-import Data.Set (Set)
-import Data.List (nub, sortBy)
-import qualified Data.Set as Set
+import           Data.Char  (digitToInt)
+import           Data.List  (nub, sortBy)
+import           Data.Set   (Set)
+import qualified Data.Set   as Set
+import           Specs      (specFromExamples, specItem)
+import           Test.Hspec (SpecWith, describe, hspec, it, shouldBe)
 
 input :: IO [String]
 input = lines <$> readFile "day02input.txt"
 
-data PackageType = 
-  Twopeet | Threepeet
-    deriving (Show, Eq, Ord)
+data PackageType
+  = Twopeet
+  | Threepeet
+  deriving (Show, Eq, Ord)
 
 type Checksum = Set PackageType
 
@@ -38,11 +39,11 @@ checksum xs = Set.fromList repeats
     filterFreq x = filter (\(f, _) -> f == x) frequencies
     twos = hasSome $ filterFreq 2
     threes = hasSome $ filterFreq 3
-    repeats = 
+    repeats =
       case (twos, threes) of
-        (True, True) -> [Twopeet, Threepeet]
-        (False, True) -> [Threepeet]
-        (True, False) -> [Twopeet]
+        (True, True)   -> [Twopeet, Threepeet]
+        (False, True)  -> [Threepeet]
+        (True, False)  -> [Twopeet]
         (False, False) -> []
 
 solve :: [String] -> Int
@@ -64,20 +65,19 @@ examples =
   ]
   where
     none = Set.empty
-    two = Set.fromList [Twopeet] 
+    two = Set.fromList [Twopeet]
     three = Set.fromList [Threepeet]
     both = Set.union two three
 
 tests = do
   describe "solve" $
-    it "works with example" $
-      solve (map fst examples) `shouldBe` 12
+    it "works with example" $ solve (map fst examples) `shouldBe` 12
   describe "checksum" $
-    specFromExamples 
+    specFromExamples
       examples
-      (\(input, expected) -> 
-        specItem (show input ++ " should be: " ++ show expected) $
-          checksum input `shouldBe` expected)
+      (\(input, expected) ->
+         specItem (show input ++ " should be: " ++ show expected) $
+         checksum input `shouldBe` expected)
 
 main :: IO ()
 main = do
