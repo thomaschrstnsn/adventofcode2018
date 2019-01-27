@@ -13,7 +13,6 @@ import           Data.Map.Strict                ( Map )
 import           Data.Function                  ( on )
 import           Data.List                      ( groupBy
                                                 , intercalate
-                                                , nub
                                                 , sortOn
                                                 )
 import           Test.Hspec                     ( describe
@@ -21,6 +20,8 @@ import           Test.Hspec                     ( describe
                                                 , it
                                                 , shouldBe
                                                 )
+import           Data.Set                       ( Set )
+import qualified Data.Set                      as Set
 import           Text.ParserCombinators.Parsec
 
 grouping :: (Eq a, Ord a) => [(a, b)] -> [(a, [b])]
@@ -65,96 +66,41 @@ data StepDependency = SD
   , dependsOn :: Step
   } deriving (Eq, Show, Ord)
 
+-- | Steps and their required dependencies
+type DependencyGraph = Map Step (Set Step)
+
+buildGraph :: [StepDependency] -> DependencyGraph
+buildGraph sds =
+  Map.union internal $ Map.fromAscList $ map (\l -> (l, Set.empty)) $ Set.toList
+    leafs
+ where
+  internal =
+    Map.fromAscList $ map (\(k, vs) -> (k, Set.fromList vs)) $ grouping $ map
+      (\sd -> (step sd, dependsOn sd))
+      sds
+  allSteps = Set.fromList $ map dependsOn sds
+  leafs    = Set.difference allSteps (Set.fromList $ Map.keys internal)
+
 (==>) :: Step -> Step -> StepDependency
 (==>) dep step = SD { step = step, dependsOn = dep }
 
-data Graph a =
-  Node a
-       [Graph a]
-  deriving (Eq, Show)
-
-leaf :: a -> Graph a
-leaf x = Node x []
-
-single :: a -> Graph a -> Graph a
-single x g = Node x [g]
-
-multiple :: a -> [Graph a] -> Graph a
-multiple = Node
-
-node :: Graph a -> a
-node (Node x _) = x
-
-type DependencyGraph = Graph Step
-
-except :: Eq a => [a] -> [a] -> [a]
-except xs ys = filter (not . (`elem` ys)) xs
-
-union :: Eq a => [a] -> [a] -> [a]
-union xs ys = filter (`elem` ys) xs
-
-stepsThatLeadTo :: [Step] -> [StepDependency] -> Step -> [Step]
-stepsThatLeadTo remaining sds s =
-  map dependsOn (filter ((== s) . step) sds) `union` remaining
-
-fuse :: [DependencyGraph] -> [DependencyGraph]
-fuse dgs = map (\(s, dgss) -> multiple s (concat dgss)) $ grouping $ map
-  (\(Node s st) -> (s, st))
-  dgs
-
-expand :: [StepDependency] -> [Step] -> DependencyGraph -> [DependencyGraph]
-expand sds remaining dg@(Node s _) = case stepsThatLeadTo remaining sds s of
-  []  -> [dg]
-  [x] -> [single x dg]
-  xs  -> map (`single` dg) xs
-
-buildGraph :: [StepDependency] -> [DependencyGraph]
-buildGraph sds = build' (steps `except` terminals) $ map leaf terminals
+run :: [Step] -> DependencyGraph -> [Step]
+run res dg | Map.empty == dg = reverse res
+           | otherwise       = run res' next
  where
-  steps        = nub $ concatMap (\sd -> [step sd, dependsOn sd]) sds
-  dependencies = nub $ map dependsOn sds
-  terminals    = steps `except` dependencies
-  build' :: [Step] -> [DependencyGraph] -> [DependencyGraph]
-  build' []             [done] = [done]
-  build' remainingSteps level  = if level == next
-    then level -- error $ "feck: " ++ show (length level) ++ " nodes: " ++ show
-      -- (map node level)
-    else build' rs' next
-   where
-    currentAndRemaining = remainingSteps ++ map node level
-    next = fuse $ concatMap (expand sds currentAndRemaining) level
-    stepsHere           = map node next
-    rs'                 = remainingSteps `except` stepsHere
-
-type Requirements = Map Step [Step]
-
-buildReqs :: [StepDependency] -> Requirements
-buildReqs sds =
-  Map.fromAscList $ grouping $ map (\sd -> (step sd, dependsOn sd)) sds
-
-run :: Requirements -> [DependencyGraph] -> String
-run reqs dgs = run' dgs []
- where
-  run' :: [DependencyGraph] -> [Step] -> String
-  run' []  res = nub $ reverse $ map (\(Step c) -> c) res
-  run' dgs res = run' dgs' res'
-   where
-    canRun :: DependencyGraph -> Bool
-    canRun (Node s _) = case Map.lookup s reqs of
-      Just deps -> null $ deps `except` res
-      Nothing   -> True
-    possible         = filter canRun dgs
-    next             = head $ sortOn node possible
-    (Node step deps) = next
-    dgs'             = deps ++ filter (/= next) dgs
-    res'             = step : res
+  removeCurrent s ds =
+    if s == current then Nothing else Just $ Set.filter (/= current) ds
+  runnable = Map.filter Set.null dg
+  current  = minimum $ Map.keys runnable
+  next     = Map.mapMaybeWithKey removeCurrent dg
+  res'     = current : res
 
 solve :: String -> Either String String
 solve s = do
   deps <- readDependencies s
-  let gs = buildGraph deps
-  let r  = buildReqs deps
-  return $ run r gs
+  let gs    = buildGraph deps
+  let steps = run [] gs
+  return $ map (\(Step c) -> c) steps
 
 example :: String
 example = intercalate
@@ -179,19 +125,6 @@ tests = do
     `shouldBe` Right expected
   describe "solve" $ it "works with example" $ solve example `shouldBe` Right
     "CABDFE"
-
-toDot :: [StepDependency] -> [String]
-toDot sds = ["digraph {"] ++ map sdAsLine sds ++ ["}"]
- where
-  sdAsLine :: StepDependency -> String
-  sdAsLine sd = "\t" ++ [from] ++ " -> " ++ [to]
-   where
-    (Step from) = dependsOn sd
-    (Step to  ) = step sd
-
-writeDotFile :: [StepDependency] -> String -> IO ()
-writeDotFile sds fn = writeFile fn content
-  where content = intercalate "\n" (toDot sds)
 
 main :: IO ()
 main = do
