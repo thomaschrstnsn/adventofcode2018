@@ -7,14 +7,13 @@
   --package containers
 -}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE BangPatterns #-}
 
 import           Test.Hspec                     ( describe
                                                 , hspec
                                                 , it
                                                 , shouldBe
                                                 )
-import qualified Data.Sequence                 as Seq
-import           Data.Sequence                  ( Seq )
 import           Specs                          ( specFromExamples
                                                 , specItem
                                                 )
@@ -22,7 +21,6 @@ import           Data.IntMap.Strict             ( IntMap )
 import qualified Data.IntMap.Strict            as IntMap
 import           Data.Foldable                  ( maximumBy
                                                 , Foldable
-                                                , toList
                                                 )
 import           Data.Ord                       ( comparing )
 import           Debug.Trace                    ( traceShow )
@@ -35,32 +33,28 @@ data Game = Game {
 input :: Game
 input = Game { gPlayers = 418, gLastMarble = 71339 }
 
-type Marbles = Seq Int
+type Marbles = [Int]
 
-putInto :: Seq Int -> Int -> Seq Int
-putInto s n = case Seq.length s of
-  1 -> rotateAround 1 $ Seq.insertAt 1 n s
-  2 -> rotateAround 0 $ Seq.insertAt 0 n s
-  _ -> rotateAround 2 $ Seq.insertAt 2 n s
+putInto :: Marbles -> Int -> Marbles
+putInto !input ele = rotateAroundAndInsert rotation input ele
  where
-  rotateAround n s' =
-    Seq.fromList $ take (Seq.length s + 1) $ drop n $ cycle $ toList s'
+  rotateAroundAndInsert index !m ele =
+    let (second, first) = splitAt index m in concat [[ele], first, second]
+  rotation = case length input of
+    1 -> 1
+    2 -> 0
+    _ -> 2
 
-removeNumber7CounterClockwise :: Seq Int -> (Seq Int, Int)
-removeNumber7CounterClockwise s = (res, removed)
- where
-  rotateAroundCounter n s' =
-    Seq.fromList
-      $ reverse
-      $ take (Seq.length s + 1)
-      $ drop n
-      $ cycle
-      $ reverse
-      $ toList s'
-  rot     = rotateAroundCounter 7 s
-  res     = Seq.drop 2 rot
-  removed = Seq.index rot 1
-
+removeNumber7CounterClockwise :: Marbles -> (Marbles, Int)
+removeNumber7CounterClockwise !m =
+  let rotateAroundCounter n a =
+          let modLength       = n `mod` length a
+              (second, first) = splitAt modLength $ reverse a
+          in  reverse $ first ++ second
+      rot     = rotateAroundCounter 7 m
+      res     = drop 1 rot
+      removed = head rot
+  in  (res, removed)
 
 maximumOn :: (Foldable t, Ord a) => (b -> a) -> t b -> b
 maximumOn = maximumBy . comparing
@@ -68,9 +62,9 @@ maximumOn = maximumBy . comparing
 solve :: Game -> Int
 solve game = winner
  where
-  finalScores = runRounds game (initial game) (Seq.singleton 0) 1
+  finalScores = runRounds game (initial game) [0] 1
   playerScores =
-    (\(player, scores) -> (player, sum scores)) <$> IntMap.toList finalScores
+    (\(player, !scores) -> (player, sum scores)) <$> IntMap.toList finalScores
   winner = maximum $ snd <$> playerScores
 
 type Score = IntMap [Int]
@@ -79,7 +73,7 @@ initial :: Game -> Score
 initial g = IntMap.fromList $ (, []) <$> [1 .. gPlayers g]
 
 runRounds :: Game -> Score -> Marbles -> Int -> Score
-runRounds game score marbles round
+runRounds game score !marbles round
   | round > gLastMarble game = score
   | otherwise = if multipleOf23
     then
@@ -115,8 +109,8 @@ tests = do
           ++ " should yield: "
           ++ show expected
           )
-        $          putInto (Seq.fromList input) ele
-        `shouldBe` Seq.fromList expected
+        $          putInto input ele
+        `shouldBe` expected
     )
   describe "removeNumber7"
     $ it "works as example"
@@ -169,8 +163,7 @@ tests = do
             , 4
             , 18
             ]
-      in  removeNumber7CounterClockwise (Seq.fromList input)
-            `shouldBe` (Seq.fromList expected, 9)
+      in  removeNumber7CounterClockwise input `shouldBe` (expected, 9)
   describe "solving" $ specFromExamples
     [ ( (9, 25)
       , 32
