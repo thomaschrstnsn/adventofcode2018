@@ -4,11 +4,13 @@
   --resolver lts-12.18
   --package hspec
   --package hspec-core
+  --package vector
   --package containers
 -}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
 
+import           Prelude                 hiding ( round )
 import           Test.Hspec                     ( describe
                                                 , hspec
                                                 , it
@@ -19,11 +21,8 @@ import           Specs                          ( specFromExamples
                                                 )
 import           Data.IntMap.Strict             ( IntMap )
 import qualified Data.IntMap.Strict            as IntMap
-import           Data.Foldable                  ( maximumBy
-                                                , Foldable
-                                                )
-import           Data.Ord                       ( comparing )
-import           Debug.Trace                    ( traceShow )
+import qualified Data.Vector.Unboxed           as V
+import           Data.Vector.Unboxed            ( Vector )
 
 data Game = Game {
   gPlayers :: Int,
@@ -33,36 +32,34 @@ data Game = Game {
 input :: Game
 input = Game { gPlayers = 418, gLastMarble = 71339 }
 
-type Marbles = [Int]
+type Marbles = Vector Int
 
 putInto :: Marbles -> Int -> Marbles
-putInto !input ele = rotateAroundAndInsert rotation input ele
- where
-  rotateAroundAndInsert index !m ele =
-    let (second, first) = splitAt index m in concat [[ele], first, second]
-  rotation = case length input of
-    1 -> 1
-    2 -> 0
-    _ -> 2
+putInto !inp ele =
+  let rotateAroundAndInsert index =
+          let (second, first) = V.splitAt index inp
+          in  V.concat [V.singleton ele, first, second]
+      rotation = case V.length inp of
+        1 -> 1
+        2 -> 0
+        _ -> 2
+  in  rotateAroundAndInsert rotation
 
 removeNumber7CounterClockwise :: Marbles -> (Marbles, Int)
 removeNumber7CounterClockwise !m =
   let rotateAroundCounter n a =
-          let modLength       = n `mod` length a
-              (second, first) = splitAt modLength $ reverse a
-          in  reverse $ first ++ second
+          let modLength       = n `mod` V.length a
+              (second, first) = V.splitAt modLength $ V.reverse a
+          in  V.reverse $ first V.++ second
       rot     = rotateAroundCounter 7 m
-      res     = drop 1 rot
-      removed = head rot
+      res     = V.drop 1 rot
+      removed = V.head rot
   in  (res, removed)
-
-maximumOn :: (Foldable t, Ord a) => (b -> a) -> t b -> b
-maximumOn = maximumBy . comparing
 
 solve :: Game -> Int
 solve game = winner
  where
-  finalScores = runRounds game (initial game) [0] 1
+  finalScores = runRounds game (initial game) (V.singleton 0) 1
   playerScores =
     (\(player, !scores) -> (player, sum scores)) <$> IntMap.toList finalScores
   winner = maximum $ snd <$> playerScores
@@ -100,21 +97,21 @@ tests = do
     , ([5, 1, 3, 0, 4, 2]   , 6, [6, 3, 0, 4, 2, 5, 1])
     , ([6, 3, 0, 4, 2, 5, 1], 7, [7, 0, 4, 2, 5, 1, 6, 3])
     ]
-    (\(input, ele, expected) ->
+    (\(inp, ele, expected) ->
       specItem
           (  "putting: "
           ++ show ele
           ++ " into "
-          ++ show input
+          ++ show inp
           ++ " should yield: "
           ++ show expected
           )
-        $          putInto input ele
-        `shouldBe` expected
+        $          putInto (V.fromList inp) ele
+        `shouldBe` V.fromList expected
     )
   describe "removeNumber7"
     $ it "works as example"
-    $ let input =
+    $ let inp =
             [ 22
             , 11
             , 1
@@ -163,7 +160,8 @@ tests = do
             , 4
             , 18
             ]
-      in  removeNumber7CounterClockwise input `shouldBe` (expected, 9)
+      in  removeNumber7CounterClockwise (V.fromList inp)
+            `shouldBe` (V.fromList expected, 9)
   describe "solving" $ specFromExamples
     [ ( (9, 25)
       , 32

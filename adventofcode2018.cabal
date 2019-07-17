@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      .
-  build-depends:       base >= 4.7 && < 5, hspec, hspec-core, QuickCheck, vector, primitive, containers, parsec, time
+  build-depends:       base >= 4.7 && < 5, hspec, hspec-core, QuickCheck, vector, primitive, containers, parsec, time, vector
   default-language:    Haskell2010
   other-modules:       Specs
   ghc-options:         -W
@@ -24,7 +24,7 @@ executable day09
   main-is: day09.hs
   hs-source-dirs:
       .
-  build-depends:       base >= 4.7 && < 5, hspec, hspec-core, containers
+  build-depends:       base >= 4.7 && < 5, hspec, hspec-core, containers, vector
   other-modules:       Specs
   ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N -O2
 
